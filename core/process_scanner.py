@@ -56,7 +56,14 @@ def scan_all_processes(foreground_pid: Optional[int] = None) -> List[ProcessInfo
         try:
             info = proc.info
             pid = info["pid"]
-            mem_bytes = info["memory_info"].rss if info.get("memory_info") else 0
+            
+            mem_info = info.get("memory_info")
+            if mem_info:
+                # Use 'private' to match Windows Task Manager's "Private Working Set"
+                # Fallback to 'rss' if private is not available (e.g. on Linux testing)
+                mem_bytes = getattr(mem_info, 'private', mem_info.rss)
+            else:
+                mem_bytes = 0
 
             processes.append(ProcessInfo(
                 pid=pid,

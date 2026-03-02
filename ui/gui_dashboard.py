@@ -436,9 +436,6 @@ class GuiDashboard:
             ProcessInfo(pid=0, name=name, is_foreground=False)
         )
 
-        # Hardware Fan Controls
-        self._build_hw_control_panel(parent)
-
     # ── Controls Panel (Right) ───────────────────────────────────────────
 
     def _build_hw_control_panel(self, parent):
@@ -499,6 +496,9 @@ class GuiDashboard:
             self._last_fan_log = time.time()
 
     def _build_controls_panel(self, parent):
+        # Hardware Fan Controls
+        self._build_hw_control_panel(parent)
+
         # Mode section
         mode_frame = self._card(parent, "🎛️ Optimizer Controls")
 

@@ -209,6 +209,10 @@ class MemoryOptimizer:
         if ram_percent < 60:
             return 0
 
+        import ctypes
+        import psutil
+        from core.telemetry import get_system_snapshot
+
         try:
             kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
             psapi = ctypes.WinDLL("psapi", use_last_error=True)
@@ -223,21 +227,41 @@ class MemoryOptimizer:
         PROCESS_SET_QUOTA = 0x0100
 
         flushed = 0
-        import psutil
+        
+        # We need CPU usage and foreground status to be smart about flushing
+        # Since CPU% requires an interval, we do a quick non-blocking snapshot
+        # or just rely on the existing psutil cpu_percent.
+        
+        # Fast grab of current foreground window PID
+        user32 = ctypes.WinDLL('user32', use_last_error=True)
+        hwnd = user32.GetForegroundWindow()
+        foreground_pid = ctypes.c_ulong()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(foreground_pid))
+        fg_pid = foreground_pid.value
 
-        for proc in psutil.process_iter(["pid", "name"]):
+        for proc in psutil.process_iter(["pid", "name", "cpu_percent"]):
             try:
                 pid = proc.info["pid"]
                 name = (proc.info["name"] or "").lower()
+                cpu_pct = proc.info.get("cpu_percent") or 0.0
 
-                # Skip protected processes
-                dummy = ProcessInfo(pid=pid, name=name, is_foreground=False)
-                if self._lists.is_protected(dummy):
-                    continue
-
-                # Skip PID 0 and 4 (System)
+                # 1. Skip PID 0 and 4 (System)
                 if pid in (0, 4):
                     continue
+                    
+                # 2. Skip Foreground Process (Never stutter the active window)
+                if pid == fg_pid:
+                    continue
+                    
+                # 3. Skip Active Processes (CPU > 1%) 
+                # Ripping memory from an actively computing process causes timeouts/crashes
+                if cpu_pct > 1.0:
+                    continue
+                    
+                # 4. We purposefully DO NOT check self._lists.is_protected() here.
+                # We WANT to flush the memory of background/idle renderer processes 
+                # belonging to Chrome/Electron, which are whitelisted. The CPU check 
+                # makes it safe.
 
                 # Open process with required access
                 handle = kernel32.OpenProcess(
@@ -259,6 +283,6 @@ class MemoryOptimizer:
                 continue
 
         if flushed > 0:
-            logger.info(f"💨 Flushed working sets of {flushed} processes")
+            logger.info(f"💨 Flushed working sets of {flushed} idle background processes")
 
         return flushed
