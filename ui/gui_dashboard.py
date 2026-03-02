@@ -451,7 +451,14 @@ class GuiDashboard:
         
         # Row with -, scale, +
         ctrl_row = tk.Frame(hw_frame, bg=_COLORS["bg_card"])
-        ctrl_row.pack(fill=tk.X, padx=10, pady=(4, 10))
+        ctrl_row.pack(fill=tk.X, padx=10, pady=(4, 2))
+        
+        # RPM label
+        self._rpm_label = tk.Label(
+            hw_frame, text="Speed: 3000 RPM", font=("Consolas", 9),
+            fg=_COLORS["accent_blue"], bg=_COLORS["bg_card"], anchor="w"
+        )
+        self._rpm_label.pack(fill=tk.X, padx=10, pady=(0, 10))
         
         def decrease_fan():
             val = max(0, self._fan_var.get() - 10)
@@ -486,7 +493,11 @@ class GuiDashboard:
         ).pack(side=tk.RIGHT)
 
     def _on_fan_change(self, val):
-        speed = int(val)
+        speed = int(float(val))
+        rpm = int((speed / 100.0) * 6000)
+        if hasattr(self, '_rpm_label'):
+            self._rpm_label.config(text=f"Speed: {rpm} RPM")
+
         # Apply to mock backend
         from core.telemetry import set_mock_fan_speed
         set_mock_fan_speed(speed)
@@ -785,7 +796,11 @@ class GuiDashboard:
         # Sync Fan slider state if backend changed it indirectly
         if not getattr(self, '_fan_sliding', False):
             if abs(self._fan_var.get() - snapshot.fan_speed_percent) > 1:
-                self._fan_var.set(int(snapshot.fan_speed_percent))
+                speed = int(snapshot.fan_speed_percent)
+                self._fan_var.set(speed)
+                rpm = int((speed / 100.0) * 6000)
+                if hasattr(self, '_rpm_label'):
+                    self._rpm_label.config(text=f"Speed: {rpm} RPM")
 
         # CPU cores (rebuild if core count changed)
         if len(self._cpu_core_bars) != len(snapshot.cpu_cores):
