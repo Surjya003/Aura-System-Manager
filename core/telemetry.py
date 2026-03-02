@@ -49,23 +49,42 @@ def get_cpu_info() -> List[CpuCoreInfo]:
 def get_gpu_info() -> List[GpuInfo]:
     """Collect GPU metrics (load, VRAM, temperature).
 
-    Returns an empty list if no NVIDIA GPU is detected or GPUtil fails.
+    Uses a native subprocess call to nvidia-smi instead of GPUtil because
+    GPUtil relies on distutils which was removed in Python 3.12+.
+    Returns an empty list if no NVIDIA GPU is detected.
     """
     try:
-        import GPUtil
-        gpus = GPUtil.getGPUs()
-        return [
-            GpuInfo(
-                id=gpu.id,
-                name=gpu.name,
-                load_percent=round(gpu.load * 100, 1),
-                memory_total_mb=round(gpu.memoryTotal, 1),
-                memory_used_mb=round(gpu.memoryUsed, 1),
-                memory_free_mb=round(gpu.memoryFree, 1),
-                temperature=gpu.temperature if gpu.temperature else 0.0,
-            )
-            for gpu in gpus
-        ]
+        import subprocess
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,utilization.gpu,memory.total,memory.used,memory.free,temperature.gpu",
+                "--format=csv,noheader,nounits"
+            ],
+            capture_output=True, text=True, check=True
+        )
+        
+        gpus = []
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) >= 7:
+                # Handle cases where value might be [Not Supported]
+                def safe_float(val):
+                    try: return float(val)
+                    except ValueError: return 0.0
+                    
+                gpus.append(GpuInfo(
+                    id=int(parts[0]),
+                    name=parts[1],
+                    load_percent=safe_float(parts[2]),
+                    memory_total_mb=safe_float(parts[3]),
+                    memory_used_mb=safe_float(parts[4]),
+                    memory_free_mb=safe_float(parts[5]),
+                    temperature=safe_float(parts[6]),
+                ))
+        return gpus
     except Exception as e:
         get_logger().debug(f"GPU info unavailable: {e}")
         return []
