@@ -1,0 +1,96 @@
+# ============================================================
+# Intelligent System Resource Optimizer — Configuration
+# ============================================================
+
+general:
+  scan_interval_seconds: 5        # How often the optimizer runs
+  log_level: INFO                 # DEBUG, INFO, WARNING, ERROR
+  log_file: logs/optimizer.log
+  data_dir: data                  # Directory for usage history DB
+
+memory:
+  # Threshold (MB) — background processes using more than this get flagged
+  threshold_mb: 200
+  # Action: "terminate" or "suspend"
+  default_action: suspend
+  # Max simultaneous actions per cycle (raised for aggressive cleanup)
+  max_suspensions: 30
+  # Auto mode: true = auto-execute without user confirmation
+  auto_mode: true
+  # Aggressive cleanup: also target IDLE processes when RAM is under pressure
+  aggressive_cleanup: true
+  # Flush working sets: reclaim cached RAM pages from non-protected processes
+  working_set_flush: true
+
+cpu:
+  # Core IDs to treat as Performance cores (adjust to your CPU)
+  performance_cores: [0, 1, 2, 3]
+  # Core IDs to treat as Efficiency cores
+  efficiency_cores: [4, 5, 6, 7]
+  # Enable CPU affinity routing
+  enabled: true
+
+gpu:
+  # Enable GPU preference routing via registry
+  enabled: true
+  # Known graphic-intensive apps (exe names, lowercase)
+  high_performance_apps:
+    - chrome.exe
+    - firefox.exe
+    - blender.exe
+    - photoshop.exe
+    - obs64.exe
+    - unity.exe
+    - unrealengine.exe
+  # Apps to force to integrated GPU
+  power_saving_apps:
+    - notepad.exe
+    - explorer.exe
+    - calc.exe
+
+dashboard:
+  refresh_rate_seconds: 1
+  # Max processes to display in the table
+  top_processes: 15
+
+learning:
+  # Minimum history entries before ML model trains
+  min_samples: 50
+  # Retrain interval in hours
+  retrain_interval_hours: 24
+  # Model file path
+  model_path: data/priority_model.joblib
+
+# Whitelist — NEVER touch these processes
+whitelist:
+  - svchost.exe
+  - csrss.exe
+  - lsass.exe
+  - lsaiso.exe
+  - smss.exe
+  - services.exe
+  - wininit.exe
+  - winlogon.exe
+  - explorer.exe
+  - dwm.exe
+  - fontdrvhost.exe
+  - system
+  - registry
+  - memory compression
+  - searchindexer.exe
+  - runtimebroker.exe
+  - securityhealthservice.exe
+  - sgrmbroker.exe
+  - spoolsv.exe
+  - audiodg.exe
+  - ctfmon.exe
+  - conhost.exe
+  - taskhostw.exe
+
+# Blacklist — always terminate/suspend when idle
+blacklist:
+  - gamebar.exe
+  - gamebarpresencewriter.exe
+  - yourphone.exe
+  - skypeapp.exe
+  - cortana.exe
