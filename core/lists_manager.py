@@ -69,6 +69,8 @@ class ListsManager:
     def __init__(self, config: Config = None):
         self._config = config or Config()
         self._protected_pids: Set[int] = set()
+        self._process_trees: dict = {}  # pid -> set of child pids
+        self._process_names: dict = {}  # pid -> name_lower
         self._refresh_lists()
 
     def _refresh_lists(self) -> None:
@@ -83,13 +85,66 @@ class ListsManager:
             name.lower() for name in cfg_blacklist
         }
 
-        # Dynamically protect the optimizer itself and its entire parent tree
-        # This prevents the optimizer from suspending itself or the Antigravity agent shell
+        # Dynamically map all process trees and protect whitelisted ones
+        self._map_process_trees()
+
+    def _map_process_trees(self) -> None:
+        """Efficiently map all parent-child relationships and protect whitelisted trees."""
+        self._protected_pids.clear()
+        self._process_trees.clear()
+        self._process_names.clear()
+
+        # Step 1: Collect raw parent-child mappings in one pass
+        parent_map: dict = {}
+        for proc in psutil.process_iter(['pid', 'ppid', 'name']):
+            try:
+                info = proc.info
+                pid = info['pid']
+                ppid = info.get('ppid')
+                name = (info.get('name') or '').lower()
+                
+                self._process_names[pid] = name
+                
+                if ppid is not None:
+                    if ppid not in parent_map:
+                        parent_map[ppid] = []
+                    parent_map[ppid].append(pid)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        # Step 2: Build recursive tree maps safely (avoid cycles)
+        def resolve_children(pid: int, path: Set[int]) -> Set[int]:
+            if pid in self._process_trees:
+                return self._process_trees[pid]
+            
+            # Detect cycles
+            if pid in path:
+                return set()
+            path.add(pid)
+            
+            children = set()
+            for child_pid in parent_map.get(pid, []):
+                children.add(child_pid)
+                children.update(resolve_children(child_pid, path))
+                
+            path.remove(pid)
+            self._process_trees[pid] = children
+            return children
+
+        for pid in self._process_names.keys():
+            resolve_children(pid, set())
+
+        # Step 3: Protect any tree where the root (or any node) is whitelisted
+        for pid, name in self._process_names.items():
+            if name in self._whitelist:
+                self._protected_pids.add(pid)
+                self._protected_pids.update(self._process_trees.get(pid, set()))
+
+        # Protect the optimizer itself and its parents (the agent shell)
         self._protect_own_process_tree()
 
     def _protect_own_process_tree(self) -> None:
         """Finds this process and all its parents, adding their PIDs to the protected set."""
-        self._protected_pids.clear()
         try:
             current_pid = os.getpid()
             proc = psutil.Process(current_pid)
@@ -103,16 +158,24 @@ class ListsManager:
             pass
 
     def reload(self) -> None:
-        """Reload lists if config has changed."""
+        """Reload lists if config has changed, and refresh process trees."""
         if self._config.reload_if_changed():
             self._refresh_lists()
             logger.info("Lists reloaded from config")
+        else:
+            # Periodically remap process trees even if config hasn't changed
+            # to catch newly spawned processes
+            self._map_process_trees()
 
     def is_protected(self, process: ProcessInfo) -> bool:
         """Check if a process is on the whitelist (should never be touched).
 
         Also protects the optimizer itself, its parent process tree, and the foreground process.
         """
+        # If passed a dummy object with PID=0 or invalid PID, fall back to strict name matching
+        if process.pid == 0 or process.pid is None:
+            return process.name_lower in self._whitelist
+            
         if process.pid in self._protected_pids:
             return True
         if process.is_foreground:

@@ -215,6 +215,9 @@ class MemoryOptimizer:
         except OSError:
             logger.warning("Could not load kernel32/psapi for working set flush")
             return 0
+            
+        # Refresh lists and process tree mapping to catch newly spawned children
+        self._lists.reload()
 
         PROCESS_QUERY_INFORMATION = 0x0400
         PROCESS_SET_QUOTA = 0x0100
