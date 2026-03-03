@@ -255,13 +255,23 @@ class MemoryOptimizer:
                     
                 # 3. Skip Active Processes (CPU > 1%) 
                 # Ripping memory from an actively computing process causes timeouts/crashes
-                if cpu_pct > 1.0:
-                    continue
-                    
-                # 4. We purposefully DO NOT check self._lists.is_protected() here.
-                # We WANT to flush the memory of background/idle renderer processes 
-                # belonging to Chrome/Electron, which are whitelisted. The CPU check 
-                # makes it safe.
+                # 4. General Protection Check
+                # To prevent ANY screen flashing or system stuttering, we DO NOT flush 
+                # the memory of ANY protected process (which includes all Windows OS 
+                # components and user whitelists). 
+                # Exception: We DO flush known Web Browsers & Electron apps running in 
+                # the background, as their renderer processes hoard RAM safely.
+                is_safe_target = name in {
+                    "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", 
+                    "opera.exe", "discord.exe", "slack.exe", "teams.exe", 
+                    "spotify.exe", "cursor.exe", "windsurf.exe", "code.exe"
+                }
+                
+                from models.telemetry_models import ProcessInfo
+                if not is_safe_target:
+                    # If it's not a known safe target, respect the master whitelist
+                    if self._lists.is_protected(ProcessInfo(pid=0, name=name, is_foreground=False)):
+                        continue
 
                 # Open process with required access
                 handle = kernel32.OpenProcess(

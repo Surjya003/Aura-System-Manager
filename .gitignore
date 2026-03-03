@@ -20,3 +20,9 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Build artifacts and data
+build/
+dist/
+*.spec
+data/

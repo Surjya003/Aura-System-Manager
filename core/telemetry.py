@@ -55,13 +55,19 @@ def get_gpu_info() -> List[GpuInfo]:
     """
     try:
         import subprocess
+        
+        # Subprocess flag to hide the console window when running as a windowed application.
+        # Without this, a blank CMD prompt flashes on screen continuously.
+        CREATE_NO_WINDOW = 0x08000000
+        
         result = subprocess.run(
             [
                 "nvidia-smi",
                 "--query-gpu=index,name,utilization.gpu,memory.total,memory.used,memory.free,temperature.gpu",
                 "--format=csv,noheader,nounits"
             ],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True,
+            creationflags=CREATE_NO_WINDOW
         )
         
         gpus = []
