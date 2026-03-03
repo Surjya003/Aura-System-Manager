@@ -60,6 +60,11 @@ def get_gpu_info() -> List[GpuInfo]:
         # Without this, a blank CMD prompt flashes on screen continuously.
         CREATE_NO_WINDOW = 0x08000000
         
+        # Additional STARTUPINFO protection to guarantee the subprocess window is hidden
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        
         result = subprocess.run(
             [
                 "nvidia-smi",
@@ -67,7 +72,9 @@ def get_gpu_info() -> List[GpuInfo]:
                 "--format=csv,noheader,nounits"
             ],
             capture_output=True, text=True, check=True,
-            creationflags=CREATE_NO_WINDOW
+            creationflags=CREATE_NO_WINDOW,
+            startupinfo=startupinfo,
+            timeout=5.0
         )
         
         gpus = []
